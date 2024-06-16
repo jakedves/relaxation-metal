@@ -41,3 +41,16 @@ func printMatrix(_ matrix: [Float]) {
         print()
     }
 }
+
+// sequential approach on the CPU
+func checkConverged(_ buffer: MTLBuffer, size: Int) -> Bool {
+    let bufferPointer = buffer.contents().bindMemory(to: UInt8.self, capacity: size)
+    
+    for i in 0..<size {
+        if bufferPointer[i] == 0 {
+            return false
+        }
+    }
+    
+    return true
+}
