@@ -7,73 +7,133 @@
 
 import MetalKit
 
-// MARK: Set up data on CPU
+// Set up data on CPU
 
+// as a guideline, the M1 has 8 cores, which recommended at least 8-16k threads
+// Setting the matrixWidth to 100  => 10,000 threads
+// Setting the matrixWidth to 1000 => 1,000,000 threads
+// Equally, setting the matrixWidth to 1000 leads to 1,000,000 FP32 allocations => ~4GB memory
+// but we need two matrices of the same size, so over 8GB of device memory
 let matrixWidth = 5
+var metalMatrixWidth = UInt32(matrixWidth)
 let numElements = matrixWidth * matrixWidth
 
-let matrix1 = createDefaultSquareMatrix(matrixWidth)
+let matrix = createDefaultSquareMatrix(Int(matrixWidth))
 
-printMatrix(matrix1)
+printMatrix(matrix)
 
 
-// MARK: Set up devices and pipeline
+// Get reference to GPU, create a queue of commands, and access our available shader code
+guard let device = MTLCreateSystemDefaultDevice() else {
+    print("Could not create a Metal device")
+    exit(EXIT_FAILURE)
+}
 
-let device = MTLCreateSystemDefaultDevice()
-let commandQueue = device?.makeCommandQueue()
-let gpuFunctionLibrary = device?.makeDefaultLibrary()
+guard let commandQueue = device.makeCommandQueue() else {
+    print("Could not instantiate a command queue")
+    exit(EXIT_FAILURE)
+}
 
-let relaxationStep = "one_step" // name of our shader function
+guard let gpuFunctionLibrary = device.makeDefaultLibrary() else {
+    print("Could not instantiate the default library for the Metal device")
+    exit(EXIT_FAILURE)
+}
 
-let relaxation = gpuFunctionLibrary?.makeFunction(name: relaxationStep)
+let relaxFuncName = "one_step" // name of our shader function
+guard let relaxationStep = gpuFunctionLibrary.makeFunction(name: relaxFuncName) else {
+    print("Could not find a kernel with the name: \(relaxFuncName)")
+    exit(EXIT_FAILURE)
+}
 
-// we have the shader code we want to run, now need to create a pipeline
-var pipelineState: MTLComputePipelineState! // can be nil, but assume unwrapped on access
+// Get "Compute Pipeline State" - information about using our GPU for general-purpose compute
+var pipelineState: MTLComputePipelineState!
 do {
-    pipelineState = try device?.makeComputePipelineState(function: relaxation!)
+    pipelineState = try device.makeComputePipelineState(function: relaxationStep)
 } catch {
     print(error)
 }
 
-// Allocate memory in shared memory
-// TODO: is it always shared memory between CPU/GPU? Only M-series surely?
-let readableBuffer = device?.makeBuffer(
-    bytes: matrix1,
+// Create a buffer that will store command information, and an encoder
+// that can write to the buffer
+let commandBuffer = commandQueue.makeCommandBuffer()
+
+// device.makeBuffer() does allocation and copying (when bytes provided)
+// we want the readable and writeable buffers to only be available on the GPU
+// as we will be purely number crunching with them
+let fstBuffer = device.makeBuffer(
+    bytes: matrix,
+    length: MemoryLayout<Float>.size * numElements,
+    options: .storageModePrivate
+)
+
+let sndBuffer = device.makeBuffer(
+    length: MemoryLayout<Float>.size * numElements,
+    options: .storageModePrivate
+)
+
+let widthValBuffer = device.makeBuffer(
+    bytes: &metalMatrixWidth,
+    length: MemoryLayout<Int>.size,
+    options: .storageModePrivate
+)
+
+// we want the convergence buffer to be shared as for now the CPU will
+// read from it as the GPU writes to it
+let convergenceBuffer = device.makeBuffer(
+    length: MemoryLayout<UInt8>.size * numElements, // UInt8 and uint8_t are used for booleans TODO: check if reliable
+    options: .storageModeShared
+)
+
+// to copy results back to the CPU
+let resultBuffer = device.makeBuffer(
     length: MemoryLayout<Float>.size * numElements,
     options: .storageModeShared
 )
 
-let writableBuffer = device?.makeBuffer(
-    length: MemoryLayout<Float>.size * numElements,
-    options: .storageModeShared
-)
-
-// MARK: idek
-let commandBuffer = commandQueue?.makeCommandBuffer()
-let commandEncoder = commandBuffer?.makeComputeCommandEncoder()
-
-// set indices of buffers
-commandEncoder?.setComputePipelineState(pipelineState)
-commandEncoder?.setBuffer(readableBuffer, offset: 0, index: 0)
-commandEncoder?.setBuffer(writableBuffer, offset: 0, index: 1)
-
-// per grid (what is a grid), we want ...
+// Grids contain many threadgroups, arranged into (up to) 3 dimensional blocks
+// When a kernel is dispatched, a grid is what is created for that kernel
 let threadsPerGrid = MTLSize(width: matrixWidth, height: matrixWidth, depth: 1)
+
+// The threadgroup is the "MIMD of SIMDs"
+// A threadgroup often can have 1024 threads, organised into 32 thread SIMD groups
+// Threadgroup threads can share memory, be syncronised via barriers, and so on
 let maxThreadsPerThreadgroup = pipelineState.maxTotalThreadsPerThreadgroup
+let threadsPerThreadgroup = MTLSize(width: maxThreadsPerThreadgroup, height: 1, depth: 1) // TODO: how to determine size?
 
-// TODO: What is this vs threadsPerGrid
-let threadsPerThreadgroup = MTLSize(width: maxThreadsPerThreadgroup, height: 1, depth: 1)
+// setup variables for iterative process
+// kernel called each iteration
+var converged = false
+var readableIndex = 2
+var writableIndex = 3
 
-commandEncoder?.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
-commandEncoder?.endEncoding()
-commandBuffer?.commit()
-commandBuffer?.waitUntilCompleted()
+while !converged {
+    let commandEncoder = commandBuffer?.makeComputeCommandEncoder()
+    commandEncoder?.setComputePipelineState(pipelineState)
+    
+    // this code only managed lightweight references, no copying is done here
+    commandEncoder?.setBuffer(widthValBuffer, offset: 0, index: 0)
+    commandEncoder?.setBuffer(convergenceBuffer, offset: 0, index: 1)
+    
+    commandEncoder?.setBuffer(fstBuffer, offset: 0, index: readableIndex)
+    commandEncoder?.setBuffer(sndBuffer, offset: 0, index: writableIndex)
+    
+    commandEncoder?.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+    commandEncoder?.endEncoding()
+    commandBuffer?.commit() // sends the command to GPU for processing instantly
+    commandBuffer?.waitUntilCompleted()
+    
+    // swap references to readable and writable buffer for GPU
+    (readableIndex, writableIndex) = (writableIndex, readableIndex)
+    
+    // sequential convergence check on CPU, ideally move to GPU with parallel reduction
+    converged = checkConverged(convergenceBuffer!, size: numElements)
+}
 
-var resultPointer = readableBuffer?.contents().bindMemory(to: Float.self,
-                                                          capacity: MemoryLayout<Float>.size * numElements
-)
-
-// TODO: need to iteratively
-// 1. relax step
-// 2. check convergence
-// 3. swap pointers (saves memory allocation time) and repeat/exit
+// TODO: now converged, send data back to main memory for CPU access - need some Blit data thing
+// data we want is at the index: readableIndex
+var resultPointer = fstBuffer?
+                        .contents()
+                        .bindMemory(
+                            to: Float.self,
+                            capacity: MemoryLayout<Float>.size * numElements
+                        )
