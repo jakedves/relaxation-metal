@@ -37,7 +37,11 @@ kernel void one_step(
     
     writable[0] = avg;
     
-    // TODO: check for convergence (&& with a global converged flag?)
+    // TODO: check for convergence (&& with a global converged flag?) can't do as imagine:
+    // thread 1: read global flag, computes global && local as true
+    // thread 2: read global flag, computes global && local as false
+    // thread 2: write false to global flag
+    // thread 1: overwrites global flag to true
     bool converged = difference < 0.001;
     
     // TODO: CPU should swap references of readable and writable
