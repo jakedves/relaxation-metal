@@ -24,9 +24,9 @@ let device = MTLCreateSystemDefaultDevice()
 let commandQueue = device?.makeCommandQueue()
 let gpuFunctionLibrary = device?.makeDefaultLibrary()
 
-let relaxFuncName = "relaxation" // name of our shader function
+let relaxationStep = "one_step" // name of our shader function
 
-let relaxation = gpuFunctionLibrary?.makeFunction(name: relaxFuncName)
+let relaxation = gpuFunctionLibrary?.makeFunction(name: relaxationStep)
 
 // we have the shader code we want to run, now need to create a pipeline
 var pipelineState: MTLComputePipelineState! // can be nil, but assume unwrapped on access
@@ -36,14 +36,14 @@ do {
     print(error)
 }
 
-// will be assigned to buffer(0)
+// Allocate memory in shared memory
+// TODO: is it always shared memory between CPU/GPU? Only M-series surely?
 let readableBuffer = device?.makeBuffer(
     bytes: matrix1,
     length: MemoryLayout<Float>.size * numElements,
     options: .storageModeShared
 )
 
-// will be assigned to buffer(1)
 let writableBuffer = device?.makeBuffer(
     bytes: matrix2,
     length: MemoryLayout<Float>.size * numElements,
