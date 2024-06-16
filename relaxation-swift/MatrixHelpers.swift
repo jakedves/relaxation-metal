@@ -5,7 +5,7 @@
 //  Created by Jake Davies on 15/06/2024.
 //
 
-import Foundation
+import MetalKit
 
 /**
  Creates a matrix of the form:

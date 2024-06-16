@@ -55,7 +55,7 @@ do {
 
 // Create a buffer that will store command information, and an encoder
 // that can write to the buffer
-let commandBuffer = commandQueue.makeCommandBuffer()
+var commandBuffer = commandQueue.makeCommandBuffer()
 
 // device.makeBuffer() does allocation and copying (when bytes provided)
 // we want the readable and writeable buffers to only be available on the GPU
@@ -127,13 +127,31 @@ while !converged {
     
     // sequential convergence check on CPU, ideally move to GPU with parallel reduction
     converged = checkConverged(convergenceBuffer!, size: numElements)
+    
+    // create a new command buffer as previous was committed to queue
+    commandBuffer = commandQueue.makeCommandBuffer()
 }
 
-// TODO: now converged, send data back to main memory for CPU access - need some Blit data thing
 // data we want is at the index: readableIndex
-var resultPointer = fstBuffer?
-                        .contents()
-                        .bindMemory(
-                            to: Float.self,
-                            capacity: MemoryLayout<Float>.size * numElements
-                        )
+let finalAnswerBuffer = readableIndex == 2 ? fstBuffer : sndBuffer
+
+// copy from GPU private memory to shared memory (RAM)
+let blitEncoder = commandBuffer?.makeBlitCommandEncoder()
+blitEncoder?.copy(
+    from: finalAnswerBuffer!,
+    sourceOffset: 0,
+    to: resultBuffer!,
+    destinationOffset: 0,
+    size: 10
+)
+
+blitEncoder?.endEncoding()
+commandBuffer?.commit()
+commandBuffer?.waitUntilCompleted()
+
+let bufferLength = resultBuffer!.length / MemoryLayout<Float>.stride
+let bufferPointer = resultBuffer?.contents().bindMemory(to: Float.self, capacity: bufferLength)
+let resultMatrix = Array(UnsafeBufferPointer(start: bufferPointer, count: bufferLength))
+
+printMatrix(resultMatrix)
+
