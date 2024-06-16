@@ -18,9 +18,9 @@ kernel void one_step(
     uint x = gid.x;
     uint y = gid.y;
     
-    uint width = 0; // TODO: remove
+    uint width = 0; // TODO: remove, pass reference to width value
                          
-    if (x == 0 || y == 0 || x == width || y == width) {
+    if (x == 0 || y == 0 || x == width - 1 || y == width - 1) {
         return;
     }
     
