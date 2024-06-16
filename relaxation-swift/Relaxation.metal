@@ -35,7 +35,7 @@ kernel void one_step(
     float previous = readable[0];
     float difference = abs(previous - avg);
     
-    writable[0] = avg;
+    writable[x * w + y] = avg;
     
     // TODO: check for convergence on CPU
     // cannot do in threadgroups as can't all simultaneously write to same location

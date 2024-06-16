@@ -13,7 +13,6 @@ let matrixWidth = 5
 let numElements = matrixWidth * matrixWidth
 
 let matrix1 = createDefaultSquareMatrix(matrixWidth)
-let matrix2 = createDefaultSquareMatrix(matrixWidth)
 
 printMatrix(matrix1)
 
@@ -45,8 +44,36 @@ let readableBuffer = device?.makeBuffer(
 )
 
 let writableBuffer = device?.makeBuffer(
-    bytes: matrix2,
     length: MemoryLayout<Float>.size * numElements,
     options: .storageModeShared
 )
 
+// MARK: idek
+let commandBuffer = commandQueue?.makeCommandBuffer()
+let commandEncoder = commandBuffer?.makeComputeCommandEncoder()
+
+// set indices of buffers
+commandEncoder?.setComputePipelineState(pipelineState)
+commandEncoder?.setBuffer(readableBuffer, offset: 0, index: 0)
+commandEncoder?.setBuffer(writableBuffer, offset: 0, index: 1)
+
+// per grid (what is a grid), we want ...
+let threadsPerGrid = MTLSize(width: matrixWidth, height: matrixWidth, depth: 1)
+let maxThreadsPerThreadgroup = pipelineState.maxTotalThreadsPerThreadgroup
+
+// TODO: What is this vs threadsPerGrid
+let threadsPerThreadgroup = MTLSize(width: maxThreadsPerThreadgroup, height: 1, depth: 1)
+
+commandEncoder?.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+commandEncoder?.endEncoding()
+commandBuffer?.commit()
+commandBuffer?.waitUntilCompleted()
+
+var resultPointer = readableBuffer?.contents().bindMemory(to: Float.self,
+                                                          capacity: MemoryLayout<Float>.size * numElements
+)
+
+// TODO: need to iteratively
+// 1. relax step
+// 2. check convergence
+// 3. swap pointers (saves memory allocation time) and repeat/exit
