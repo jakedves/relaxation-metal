@@ -11,8 +11,7 @@ using namespace metal;
 // the device address space is for persistent memory that the GPU can read/write
 kernel void one_step(
                      device const uint *width     [[ buffer(0) ]],
-                     device uint8_t *convergence     [[ buffer(1) ]],
-                     
+                     device uint8_t *convergence  [[ buffer(1) ]],
                      device const float *readable [[ buffer(2) ]],
                      device float *writable       [[ buffer(3) ]],
                      uint2 gid      [[ thread_position_in_grid ]]
@@ -25,6 +24,7 @@ kernel void one_step(
     uint index = x * w + y;
                          
     if (x == 0 || y == 0 || x == bound || y == bound) {
+        convergence[index] = 1;
         return;
     }
     
