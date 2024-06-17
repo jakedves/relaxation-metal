@@ -45,7 +45,8 @@ func printMatrix(_ matrix: [Float]) {
 }
 
 func printMatrixFromBuffer(_ matrix: MTLBuffer) {
-    let bufferLength = matrix.length / MemoryLayout<Float>.stride // TODO: Stride vs size
+    // bytes / num of bytes a float takes up in array
+    let bufferLength = matrix.length / MemoryLayout<Float>.stride
     let bufferPointer = matrix.contents().bindMemory(to: Float.self, capacity: bufferLength)
     let resultMatrix = Array(UnsafeBufferPointer(start: bufferPointer, count: bufferLength))
 
