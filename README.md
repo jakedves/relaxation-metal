@@ -1,5 +1,7 @@
 # Relaxation in Metal
 
+This repository implements the "relaxation technique" in Metal, Apple's GPU framework.
+
 The relaxation technique is a method for solving differential equations for weather forecasting, etc. The problem is replacing each element of a matrix, by the average of its four neighbours until convergence, besides boundary elements. An example step shown below:
 
 <table>
