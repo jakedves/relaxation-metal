@@ -49,3 +49,20 @@ For large matrices, it makes sense to do this computation in parallel. It is ver
 - Syncronization
 
 This repository implements the relaxation technique in Metal Compute (parallel) and Swift (sequentially). The two implementations are compared for correctness.
+
+Speedup, times in seconds (6 d.p) over three runs:
+
+| Elements    | CPU        | GPU      | Speedup |
+| ----------- | ---------- |----------|---------|
+| 100         |   0.006444 | 0.029316 | 0.22 |
+| 10,000      |   2.625666 | 0.282057 | 9.31 |
+| 1,000,000   | 244.828203 | 3.729596 | 65.64 |
+| 100,000,000 | | | |
+
+Configuration:
+```
+MacBook Pro 13" 2020
+1.4 GHz Quad-Core Intel Core i5
+Intel Iris Plus Graphics 645 1536 MB
+8 GB 2133 MHz LPDDR3
+```
