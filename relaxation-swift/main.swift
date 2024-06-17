@@ -18,9 +18,9 @@ let matrixWidth = 5
 var metalMatrixWidth = UInt32(matrixWidth)
 let numElements = matrixWidth * matrixWidth
 
-let matrix = createDefaultSquareMatrix(Int(matrixWidth))
+let initialMatrix = createDefaultSquareMatrix(Int(matrixWidth))
 
-printMatrix(matrix)
+printMatrix(initialMatrix)
 
 
 // Get reference to GPU, create a queue of commands, and access our available shader code
@@ -57,36 +57,32 @@ do {
 // that can write to the buffer
 var commandBuffer = commandQueue.makeCommandBuffer()
 
-// device.makeBuffer() does allocation and copying (when bytes provided)
+// device.makeBuffer() does allocation, and copying (when bytes provided)
 // we want the readable and writeable buffers to only be available on the GPU
 // as we will be purely number crunching with them
+// however not sure how to setup with provided data, so will use shared memory for now
 let fstBuffer = device.makeBuffer(
-    bytes: matrix,
+    bytes: initialMatrix,
     length: MemoryLayout<Float>.size * numElements,
-    options: .storageModePrivate
-)
+    options: .storageModeShared
+)!
 
 let sndBuffer = device.makeBuffer(
+    bytes: initialMatrix,
     length: MemoryLayout<Float>.size * numElements,
-    options: .storageModePrivate
-)
+    options: .storageModeShared
+)!
 
 let widthValBuffer = device.makeBuffer(
     bytes: &metalMatrixWidth,
     length: MemoryLayout<Int>.size,
-    options: .storageModePrivate
+    options: .storageModeShared
 )
 
 // we want the convergence buffer to be shared as for now the CPU will
 // read from it as the GPU writes to it
 let convergenceBuffer = device.makeBuffer(
     length: MemoryLayout<UInt8>.size * numElements, // UInt8 and uint8_t are used for booleans TODO: check if reliable
-    options: .storageModeShared
-)
-
-// to copy results back to the CPU
-let resultBuffer = device.makeBuffer(
-    length: MemoryLayout<Float>.size * numElements,
     options: .storageModeShared
 )
 
@@ -105,6 +101,7 @@ let threadsPerThreadgroup = MTLSize(width: maxThreadsPerThreadgroup, height: 1, 
 var converged = false
 var readableIndex = 2
 var writableIndex = 3
+var iteration = 0
 
 while !converged {
     let commandEncoder = commandBuffer?.makeComputeCommandEncoder()
@@ -128,30 +125,15 @@ while !converged {
     // sequential convergence check on CPU, ideally move to GPU with parallel reduction
     converged = checkConverged(convergenceBuffer!, size: numElements)
     
+    // printReadableMatrix(index: readableIndex, fstBuffer, sndBuffer)
+    
     // create a new command buffer as previous was committed to queue
     commandBuffer = commandQueue.makeCommandBuffer()
+    iteration += 1
 }
 
 // data we want is at the index: readableIndex
-let finalAnswerBuffer = readableIndex == 2 ? fstBuffer : sndBuffer
+print("\(iteration) iterations")
+printReadableMatrix(index: readableIndex, fstBuffer, sndBuffer)
 
-// copy from GPU private memory to shared memory (RAM)
-let blitEncoder = commandBuffer?.makeBlitCommandEncoder()
-blitEncoder?.copy(
-    from: finalAnswerBuffer!,
-    sourceOffset: 0,
-    to: resultBuffer!,
-    destinationOffset: 0,
-    size: 10
-)
-
-blitEncoder?.endEncoding()
-commandBuffer?.commit()
-commandBuffer?.waitUntilCompleted()
-
-let bufferLength = resultBuffer!.length / MemoryLayout<Float>.stride
-let bufferPointer = resultBuffer?.contents().bindMemory(to: Float.self, capacity: bufferLength)
-let resultMatrix = Array(UnsafeBufferPointer(start: bufferPointer, count: bufferLength))
-
-printMatrix(resultMatrix)
-
+relaxSequential(matrix: initialMatrix)
