@@ -36,10 +36,23 @@ func printMatrix(_ matrix: [Float]) {
     
     for i in 0..<width {
         for j in 0..<width {
-            print(matrix[i * width + j], terminator: " ")
+            let number = matrix[i * width + j]
+            print(String(format: "%.4f", number), terminator: " ")
         }
         print()
     }
+}
+
+func printMatrixFromBuffer(_ matrix: MTLBuffer) {
+    let bufferLength = matrix.length / MemoryLayout<Float>.stride // TODO: Stride vs size
+    let bufferPointer = matrix.contents().bindMemory(to: Float.self, capacity: bufferLength)
+    let resultMatrix = Array(UnsafeBufferPointer(start: bufferPointer, count: bufferLength))
+
+    printMatrix(resultMatrix)
+}
+
+func printReadableMatrix(index: Int, _ fst: MTLBuffer, _ snd: MTLBuffer) {
+    printMatrixFromBuffer(index == 2 ? fst : snd)
 }
 
 // sequential approach on the CPU
