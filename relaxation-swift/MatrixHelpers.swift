@@ -119,5 +119,5 @@ func relaxSequential(matrix: [Float]) {
     }
     
     print("\(iterations) iterations")
-    printMatrix(readable)
+    // printMatrix(readable)
 }

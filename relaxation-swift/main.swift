@@ -21,7 +21,7 @@ let numElements = matrixWidth * matrixWidth
 
 let initialMatrix = createDefaultSquareMatrix(Int(matrixWidth))
 
-printMatrix(initialMatrix)
+// printMatrix(initialMatrix)
 
 
 // Get reference to GPU, create a queue of commands,
