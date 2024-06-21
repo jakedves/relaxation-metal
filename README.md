@@ -58,16 +58,11 @@ The goal of a GPU program is to reduce branching computation, as a GPU is essent
   <img src="https://github.com/jakedves/relaxation-metal/assets/75232368/cd11d191-74d5-4652-bc66-9c8c388b43ee" width="300"/>
 </div>
 
-- The grid is the whole matrix
-- Each threadgroup is the maximum size in contiguous memory (e.g. `MTLSize(maxPerThreadGroup, 1, 1)`)
-- The edges of our matrix don't change, they return early
-- We want SIMD groups to follow same codepaths
-- Setting threadgroups as 1D lines allows SIMD groups to be smaller lines
-- These smaller lines can be completely contained within the top and bottom boundary of our matrix
-- The convergence checking is done on the CPU with linear search through the matrix
-- Would like to do a parallel reduction with `&&`, but complex to program
+We've taken the whole matrix to be the grid (2D), and have allocated thread groups as 1D lines, as the SIMD groups inside of them will follow the same codepath. At boundaries, most SIMD groups will all return early.
 
-A better design could use the grid as only the inner matrix, and allocate boundaries separately. This would allow us to remove branching completely from our kernel, and say something like "if accessing to the left and it goes out of bounds, just lookup from this different bit of memory instead".
+Currently each thread writes to an array to say if it has converged. The CPU checks if all the values in the array are `true` (slow). A better design would use a parallel reduction on the GPU, possibly after computing a local 'threadgroup converged' flag for each threadgroup.
+
+Launching kernels for each step should be efficient after the first iteration, as Metal keeps a compiler cache of kernel code [[source]](https://stackoverflow.com/a/63732727). The memory is shared so it is a question of whether ownership transfer is expensive or not (unlikely?).
 
 ## Results
 
